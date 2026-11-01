@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pari tenu</title>
+  <meta name="theme-color" content="#FBF8F1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Pari tenu">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preload" href="fonts/lilita-one-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/jost-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <!-- Supabase (comptes + base de données) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand">Pari <span>tenu</span></a>
+    <nav id="usernav" class="usernav"></nav>
+  </header>
+
+  <div id="demo-banner" class="demo-banner" hidden>
+    Mode démo — données sur cet appareil uniquement · comptes test : <b>leonie@demo.fr</b>, <b>hugo@demo.fr</b>… / mdp <b>demo</b>
+  </div>
+
+  <main id="app"><p class="loading">Chargement…</p></main>
+
+  <nav id="tabbar" class="tabbar" hidden></nav>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form"></form>
+  </dialog>
+
+  <script src="config.js"></script>
+  <script src="api-supabase.js"></script>
+  <script src="api-demo.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

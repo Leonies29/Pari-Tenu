@@ -1,0 +1,13 @@
+{
+  "name": "Pari tenu",
+  "short_name": "Pari tenu",
+  "description": "Se lancer des défis entre amis et s'y tenir ensemble.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#FBF8F1",
+  "theme_color": "#8DB596",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
