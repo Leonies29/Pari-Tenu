@@ -715,4 +715,4 @@ body {
 .suivi-opt input:checked + span { border-color: var(--rose-fonce); background: var(--rose-pale); color: var(--rose-fonce); font-weight: 600; }
 .suivi-opt input:focus-visible + span { outline: 2px solid var(--rose-fonce); outline-offset: 2px; }
 .no-saisie { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; }
-.no-saisie .ico { color: var(--vert); }
+.no-saisie .ico { color: var(--vert); } 
