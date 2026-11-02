@@ -182,7 +182,7 @@
       ];
       const dIds = rooms.filter((r) => r.kind === 'd').map((r) => r.id);
       const cIds = rooms.filter((r) => r.kind === 'c').map((r) => r.id);
-      const q = (col, ids) => ids.length ? sb.from('messages').select('defi_id, conv_id, user_id, type, contenu, data, created_at, profiles(pseudo)')
+      const q = (col, ids) => ids.length ? sb.from('messages').select('defi_id, conv_id, user_id, type, contenu, data, created_at, profiles!messages_user_id_fkey(pseudo)')
         .in(col, ids).order('created_at', { ascending: false }).limit(400) : Promise.resolve({ data: [] });
       const [md, mc] = await Promise.all([q('defi_id', dIds), q('conv_id', cIds)]);
       const msgs = [...ok(md), ...ok(mc)].map((x) => ({ ...x, pseudo: x.profiles?.pseudo || '?' }));
@@ -199,7 +199,7 @@
       return { kind, id, nom: c.nom, membres: c.conv_membres.map((x) => ({ user_id: x.user_id, pseudo: x.profiles?.pseudo || '?' })) };
     },
     async getMessages(kind, id) {
-      const rows = ok(await sb.from('messages').select('*, profiles(pseudo), reponses(user_id, valeur)')
+      const rows = ok(await sb.from('messages').select('*, profiles!messages_user_id_fkey(pseudo), reponses(user_id, valeur)')
         .eq(kind === 'd' ? 'defi_id' : 'conv_id', id).order('created_at', { ascending: false }).limit(150));
       return rows.reverse().map((x) => ({ ...x, pseudo: x.profiles?.pseudo || '?', reponses: x.reponses || [] }));
     },
