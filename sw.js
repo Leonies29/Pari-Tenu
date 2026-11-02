@@ -1,5 +1,5 @@
 // Service worker minimal : rend le site installable comme une app et utilisable hors-ligne.
-const CACHE = 'pari-tenu-v13';
+const CACHE = 'pari-tenu-v15';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'api-supabase.js', 'api-demo.js', 'manifest.json', 'icon.svg',
   'fonts/lilita-one-latin-400-normal.woff2', 'fonts/jost-latin-300-normal.woff2', 'fonts/jost-latin-400-normal.woff2',
   'fonts/jost-latin-500-normal.woff2', 'fonts/jost-latin-600-normal.woff2'];

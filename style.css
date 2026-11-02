@@ -705,3 +705,14 @@ body {
 .toggle input:checked + .toggle-ui::after { transform: translateX(18px); }
 .toggle input:focus-visible + .toggle-ui { outline: 2px solid var(--rose-fonce); outline-offset: 2px; }
 .toggle small { display: block; font-size: 12px; opacity: .7; margin-top: 2px; font-weight: 400; }
+
+/* ===== Mode de suivi ===== */
+.suivi-pick { display: grid; gap: 8px; }
+.suivi-opt { cursor: pointer; position: relative; }
+.suivi-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.suivi-opt span { display: block; background: #fff; border: 1.5px solid var(--vert-pale); border-radius: 14px; padding: 11px 14px;
+  font-size: 15px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--texte); transition: all .15s; }
+.suivi-opt input:checked + span { border-color: var(--rose-fonce); background: var(--rose-pale); color: var(--rose-fonce); font-weight: 600; }
+.suivi-opt input:focus-visible + span { outline: 2px solid var(--rose-fonce); outline-offset: 2px; }
+.no-saisie { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; }
+.no-saisie .ico { color: var(--vert); }

@@ -20,6 +20,15 @@ const HINTS = {
   autre: 'Cible = nombre de fois à réaliser sur toute la période.',
 };
 
+// Comment on suit un défi
+const SUIVIS = {
+  jour: { label: 'Je note chaque jour', aide: "Tu enregistres ta journée (séance, pesée, journée clean…). L'appli te le rappelle chaque jour." },
+  semaine: { label: 'Je note chaque semaine', aide: 'Un point par semaine suffit, idéal pour une pesée hebdo.' },
+  mois: { label: 'Je note chaque mois', aide: 'Un seul point par mois, pour les défis au long cours (pesée mensuelle, budget…).' },
+  ecarts: { label: 'Je signale seulement quand je craque', aide: "Rien à faire au quotidien : chaque jour sans écart compte comme réussi. Tu déclares juste « J'ai flanché » quand ça arrive." },
+};
+const modeEcarts = (d) => d.frequence_saisie === 'ecarts';
+
 let ME = null;
 let cleanup = null; // arrête l'écoute du chat quand on change de page
 
@@ -100,10 +109,27 @@ function stats(d, m, entries, ecarts) {
   const ti = timeInfo(d);
   const last = e[e.length - 1];
   const sinceLast = last ? daysBetween(last.date, t) : Infinity;
-  const due = d.frequence_saisie === 'semaine' ? sinceLast >= 7 : sinceLast >= 1;
-  const freqTxt = d.frequence_saisie === 'semaine' ? 'de la semaine' : 'du jour';
+  const due = d.frequence_saisie === 'mois' ? sinceLast >= 30 : d.frequence_saisie === 'semaine' ? sinceLast >= 7 : sinceLast >= 1;
+  const freqTxt = d.frequence_saisie === 'mois' ? 'du mois' : d.frequence_saisie === 'semaine' ? 'de la semaine' : 'du jour';
   const unite = m.unite || TYPES[d.type]?.unite || '';
   const s = { pct: 0, big: '', sub: '', extra: '', atteint: false, todo: '' };
+
+  // Mode « je signale seulement mes écarts » : un jour sans écart = un jour réussi
+  if (modeEcarts(d)) {
+    const autorises = num(m.valeur_cible) ?? 0;
+    const jours = new Set(ecarts.filter((x) => x.joueur === m.user_id && x.date >= d.date_debut && x.date <= d.date_fin).map((x) => String(x.date).slice(0, 10)));
+    const n = jours.size;
+    const ecoules = ti.status === 'à venir' ? 0 : Math.min(ti.elapsed + 1, ti.total + 1);   // jours déjà vécus du défi
+    const clean = Math.max(0, ecoules - [...jours].filter((x) => x <= t).length);
+    const lastBad = [...jours].sort().pop();
+    const fin = t > d.date_fin ? d.date_fin : t;
+    const serie = ti.status === 'à venir' ? 0 : Math.max(0, lastBad ? daysBetween(lastBad, fin) : daysBetween(d.date_debut, fin) + 1);
+    s.pct = clamp(clean / (ti.total + 1));
+    s.atteint = n <= autorises;
+    s.big = `${serie} <small>jour${serie > 1 ? 's' : ''} sans craquer</small>`;
+    s.sub = `${n} écart${n > 1 ? 's' : ''} · ${autorises} autorisé${autorises > 1 ? 's' : ''} sur le défi${n > autorises ? ' · <b>limite dépassée</b>' : ''}`;
+    return s;
+  }
 
   if (d.type === 'poids') {
     const dep = num(m.valeur_depart) ?? (e[0] ? Number(e[0].valeur) : null);
@@ -466,7 +492,7 @@ async function renderDefi(id) {
       <div class="muted">${s.sub}</div>
       ${s.extra}
       <div class="bar mt"><i style="width:${s.pct * 100}%"></i></div>
-      <div class="muted" style="margin-top:4px">${Math.round(s.pct * 100)} % de l'objectif</div>
+      <div class="muted" style="margin-top:4px">${Math.round(s.pct * 100)} % ${modeEcarts(d) ? 'du défi tenu sans écart' : "de l'objectif"}</div>
       ${s.todo && isMe ? `<div class="todo mt">● ${s.todo}</div>` : ''}
       ${fini ? `<p class="mt ${s.atteint ? 'ok' : 'todo'}">${s.atteint ? '🎉 Objectif atteint → récompense !' : '✗ Objectif raté → sanction finale'}</p>` : ''}
       ${!fini && isMe ? `<div class="actions">${inputFor(d, m)}</div>` : ''}
@@ -540,7 +566,7 @@ async function renderDefi(id) {
         <div><b>${ti.total}</b><small>jours au total</small></div>
       </div>
       <div class="bar"><i style="width:${ti.pct * 100}%"></i></div>
-      <p class="muted center">Saisie ${d.frequence_saisie === 'semaine' ? 'chaque semaine' : 'chaque jour'} · défi ${ti.status}</p>
+      <p class="muted center">${modeEcarts(d) ? 'On signale seulement les écarts' : 'Saisie ' + ({ semaine: 'chaque semaine', mois: 'chaque mois' }[d.frequence_saisie] || 'chaque jour')} · défi ${ti.status}</p>
     </div>
 
     <div class="card">
@@ -648,6 +674,7 @@ async function renderDefi(id) {
 }
 
 function inputFor(d, m) {
+  if (modeEcarts(d)) return `<span class="muted no-saisie">${ico('check', 'sm')}Rien à noter : tu signales seulement si tu craques.</span>`;
   if (d.type === 'poids') return `<input type="number" step="0.1" placeholder="${esc(m.unite || 'kg')}" data-in>
       <input type="date" value="${today()}" data-date>
       <button class="btn small" data-act="saisie">Enregistrer la pesée</button>`;
@@ -985,6 +1012,11 @@ const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 
 
 // Statut d'un jour pour un membre d'un défi : ok (objectif tenu / saisie faite), bad (écart), ou rien
 function dayStatus(d, m, suivi, ecarts, day) {
+  if (modeEcarts(d)) {
+    const ec = ecarts.filter((x) => x.joueur === m.user_id && String(x.date).slice(0, 10) === day);
+    if (ec.length) return { st: 'bad', txt: ec.map((x) => `Écart${x.description ? ' : ' + x.description : ''}`) };
+    return day <= today() && day >= d.date_debut ? { st: 'ok', txt: ['Aucun écart, journée réussie'] } : { st: '', txt: [] };
+  }
   const e = suivi.filter((x) => x.user_id === m.user_id && String(x.date).slice(0, 10) === day);
   const ec = ecarts.filter((x) => x.joueur === m.user_id && String(x.date).slice(0, 10) === day);
   const unite = m.unite || TYPES[d.type]?.unite || '';
@@ -1143,7 +1175,7 @@ async function renderObjectif(id) {
   $('#app').innerHTML = `<section class="hero small"><h1>Mon objectif</h1><span class="kicker">${esc(d.nom)}</span></section>
     <form class="card narrow" id="obj">
       <p class="muted center">${TYPES[d.type]?.emoji || ''} ${TYPES[d.type]?.label || ''}</p>
-      ${objectifFields(d.type, m)}
+      ${objectifFields(d.type, m, d.frequence_saisie)}
       <div class="actions"><button class="btn rose">Enregistrer</button><a class="btn ghost" href="#/defi/${encodeURIComponent(d.id)}">Annuler</a></div>
     </form>`;
   $('#obj').onsubmit = async (e) => {
@@ -1188,8 +1220,11 @@ function champ(name, conf, val, type = 'number') {
     </div>`;
 }
 
-function objectifFields(type, m = {}) {
-  const c = OBJ_CHAMPS[type] || OBJ_CHAMPS.autre;
+function objectifFields(type, m = {}, mode = '') {
+  const c = mode === 'ecarts' ? {
+    phrase: 'ex : zéro sucre pendant 3 semaines',
+    cible: { label: 'Écarts autorisés sur tout le défi', ph: 'ex : 0', aide: "Combien de fois tu as le droit de craquer avant que le défi soit raté. Mets 0 pour être strict, ou 2-3 pour te laisser un peu de marge." },
+  } : (OBJ_CHAMPS[type] || OBJ_CHAMPS.autre);
   const nums = [c.depart && champ('valeur_depart', c.depart, m.valeur_depart), champ('valeur_cible', c.cible, m.valeur_cible)].filter(Boolean);
   return `<div class="field help-field">
       <div class="lbl-row"><label for="f-objectif">Mon objectif en une phrase</label>${helpBtn('aide-objectif')}</div>
@@ -1197,7 +1232,7 @@ function objectifFields(type, m = {}) {
       <p class="help-text" id="aide-objectif" hidden>Ce que tu veux réussir, en quelques mots. Tes potes le verront sur ta carte dans le défi.</p>
     </div>
     <div class="${nums.length > 1 ? 'row2' : ''}">${nums.join('')}</div>
-    ${c.unite ? champ('unite', c.unite, m.unite || TYPES[type]?.unite, 'text') : `<input type="hidden" name="unite" value="${esc(TYPES[type]?.unite || '')}">`}`;
+    ${c.unite ? champ('unite', c.unite, m.unite || TYPES[type]?.unite, 'text') : `<input type="hidden" name="unite" value="${esc(mode === 'ecarts' ? 'écarts' : TYPES[type]?.unite || '')}">`}`;
 }
 const readObjectif = (f) => ({
   objectif: f.objectif.value.trim(),
@@ -1233,9 +1268,9 @@ const IDEES = [
   { key: 'moins-3kg', cat: 'forme', icon: 'balance', titre: 'Objectif -3 kg', desc: 'Pesée chaque semaine pendant 2 mois.', type: 'poids', jours: 56, freq: 'semaine', cible: null, unite: 'kg', objectif: 'Perdre 3 kg', recompense: 'Une nouvelle tenue', sanction: 'Payer le resto aux autres' },
   { key: 'zero-clope', cat: 'forme', icon: 'nosmoke', titre: 'Zéro cigarette', desc: "Un mois sans fumer, jour après jour.", type: 'tabac', jours: 30, freq: 'jour', cible: 0, unite: 'cigarettes / jour', objectif: 'Zéro cigarette pendant 1 mois', recompense: "S'offrir ce qu'on a économisé", sanction: 'Don de 30 € à une asso' },
   { key: 'moins-clope', cat: 'forme', icon: 'nosmoke', titre: 'Réduire la cigarette', desc: '5 cigarettes max par jour pendant 3 semaines.', type: 'tabac', jours: 21, freq: 'jour', cible: 5, unite: 'cigarettes / jour', objectif: 'Pas plus de 5 par jour', recompense: 'Un ciné', sanction: 'Faire la vaisselle une semaine' },
-  { key: 'sans-alcool', cat: 'forme', icon: 'verre', titre: '1 mois sans alcool', desc: 'Coche chaque jour sans alcool.', type: 'autre', jours: 30, freq: 'jour', cible: 30, unite: 'jours', objectif: '30 jours sans alcool', recompense: 'Un brunch de luxe', sanction: 'Payer la tournée de softs' },
+  { key: 'sans-alcool', cat: 'forme', icon: 'verre', titre: '1 mois sans alcool', desc: 'Tu signales seulement si tu bois un verre.', type: 'autre', jours: 30, freq: 'ecarts', cible: 0, unite: 'jours', objectif: '30 jours sans alcool', recompense: 'Un brunch de luxe', sanction: 'Payer la tournée de softs' },
   { key: 'eau', cat: 'forme', icon: 'eau', titre: "Boire 1,5 L d'eau", desc: 'Tous les jours pendant 3 semaines.', type: 'autre', jours: 21, freq: 'jour', cible: 21, unite: 'jours', objectif: "1,5 L d'eau par jour", recompense: 'Une jolie gourde', sanction: 'Porter les courses des autres' },
-  { key: 'sucre', cat: 'forme', icon: 'feuille', titre: 'Zéro sucre ajouté', desc: '3 semaines sans bonbons, gâteaux ni sodas.', type: 'autre', jours: 21, freq: 'jour', cible: 21, unite: 'jours', objectif: '21 jours sans sucre ajouté', recompense: 'Un dessert de pâtissier', sanction: 'Cuisiner un repas healthy pour tout le monde' },
+  { key: 'sucre', cat: 'forme', icon: 'feuille', titre: 'Zéro sucre ajouté', desc: '3 semaines sans bonbons ni sodas, 1 écart autorisé.', type: 'autre', jours: 21, freq: 'ecarts', cible: 1, unite: 'jours', objectif: '21 jours sans sucre ajouté', recompense: 'Un dessert de pâtissier', sanction: 'Cuisiner un repas healthy pour tout le monde' },
   { key: 'salle-3', cat: 'sport', icon: 'sport', titre: '3 séances par semaine', desc: 'Salle, course, vélo… 3 fois par semaine.', type: 'sport', jours: 30, freq: 'jour', cible: 3, unite: 'séances / sem.', objectif: '3 séances par semaine', recompense: 'Des nouvelles baskets', sanction: "Payer 1 mois d'abonnement aux autres" },
   { key: 'pas', cat: 'sport', icon: 'pas', titre: '10 000 pas par jour', desc: 'Coche chaque jour où tu atteins 10 000 pas.', type: 'autre', jours: 30, freq: 'jour', cible: 25, unite: 'jours', objectif: '10 000 pas au moins 25 jours sur 30', recompense: 'Une rando entre potes', sanction: 'Monter à pied partout pendant une semaine' },
   { key: 'pompes', cat: 'sport', icon: 'sport', titre: '50 pompes par jour', desc: 'Un mois de pompes, sans excuse.', type: 'autre', jours: 30, freq: 'jour', cible: 30, unite: 'jours', objectif: '50 pompes chaque jour', recompense: 'Un massage', sanction: '100 pompes devant tout le monde' },
@@ -1244,9 +1279,9 @@ const IDEES = [
   { key: 'lire', cat: 'zen', icon: 'livre', titre: 'Lire 10 pages par jour', desc: 'Moins de scroll, plus de livres.', type: 'autre', jours: 30, freq: 'jour', cible: 25, unite: 'jours', objectif: '10 pages par jour', recompense: 'Un livre offert par les autres', sanction: 'Résumer un livre à tout le monde' },
   { key: 'ecran', cat: 'zen', icon: 'lune', titre: 'Pas d’écran avant de dormir', desc: "1 h sans téléphone avant d'aller au lit.", type: 'autre', jours: 21, freq: 'jour', cible: 18, unite: 'soirs', objectif: '1 h sans écran avant de dormir', recompense: 'Un pyjama tout doux', sanction: 'Une journée sans réseaux sociaux' },
   { key: 'dodo', cat: 'zen', icon: 'lune', titre: 'Au lit avant minuit', desc: 'Retrouver un vrai rythme de sommeil.', type: 'autre', jours: 30, freq: 'jour', cible: 25, unite: 'soirs', objectif: 'Au lit avant minuit', recompense: 'Une grasse mat’ sans culpabilité', sanction: 'Préparer le petit-déj des autres' },
-  { key: 'reseaux', cat: 'habitudes', icon: 'tel', titre: 'Moins de réseaux sociaux', desc: 'Moins de 1 h par jour sur les réseaux.', type: 'autre', jours: 30, freq: 'jour', cible: 25, unite: 'jours', objectif: 'Moins de 1 h de réseaux par jour', recompense: 'Une sortie sans téléphone', sanction: 'Poster une photo gênante choisie par les autres' },
+  { key: 'reseaux', cat: 'habitudes', icon: 'tel', titre: 'Moins de réseaux sociaux', desc: 'Moins de 1 h par jour, tu signales les dérapages.', type: 'autre', jours: 30, freq: 'ecarts', cible: 3, unite: 'jours', objectif: 'Moins de 1 h de réseaux par jour', recompense: 'Une sortie sans téléphone', sanction: 'Poster une photo gênante choisie par les autres' },
   { key: 'cuisine', cat: 'habitudes', icon: 'resto', titre: 'Cuisiner maison', desc: '4 repas faits maison par semaine.', type: 'sport', jours: 28, freq: 'jour', cible: 4, unite: 'repas / sem.', objectif: '4 repas maison par semaine', recompense: 'Un resto étoilé', sanction: 'Cuisiner pour toute la bande' },
-  { key: 'epargne', cat: 'habitudes', icon: 'euro', titre: 'Pas d’achats inutiles', desc: 'Coche chaque jour sans dépense plaisir.', type: 'autre', jours: 30, freq: 'jour', cible: 25, unite: 'jours', objectif: 'Zéro achat impulsif', recompense: 'Se faire plaisir avec les économies', sanction: 'Mettre 20 € dans la cagnotte commune' },
+  { key: 'epargne', cat: 'habitudes', icon: 'euro', titre: 'Pas d’achats inutiles', desc: 'Tu signales seulement les achats craquage.', type: 'autre', jours: 30, freq: 'ecarts', cible: 2, unite: 'jours', objectif: 'Zéro achat impulsif', recompense: 'Se faire plaisir avec les économies', sanction: 'Mettre 20 € dans la cagnotte commune' },
   { key: 'langue', cat: 'habitudes', icon: 'livre', titre: 'Apprendre une langue', desc: '15 minutes de pratique par jour.', type: 'autre', jours: 30, freq: 'jour', cible: 25, unite: 'jours', objectif: '15 min de langue par jour', recompense: 'Un voyage dans le pays de la langue (un jour !)', sanction: 'Parler cette langue tout un dîner' },
 ];
 
@@ -1261,7 +1296,7 @@ function renderIdees() {
       <div class="idee-grid">${IDEES.filter((i) => i.cat === c.key).map((i) => `<a class="card idee" href="#/nouveau/${i.key}">
         <span class="ico-bubble ${i.cat === 'zen' || i.cat === 'habitudes' ? 'rose' : ''}">${ico(i.icon)}</span>
         <span class="idee-body"><b>${esc(i.titre)}</b><small>${esc(i.desc)}</small>
-          <span class="idee-meta">${TYPES[i.type].label} · ${i.jours % 7 === 0 ? i.jours / 7 + ' semaines' : i.jours + ' jours'}</span></span>
+          <span class="idee-meta">${i.freq === 'ecarts' ? 'Écarts seulement' : TYPES[i.type].label} · ${i.jours % 7 === 0 ? i.jours / 7 + ' semaines' : i.jours + ' jours'}</span></span>
         <i>›</i></a>`).join('')}</div>
     </section>`).join('')}`;
   $('#app').onclick = (e) => {
@@ -1305,12 +1340,13 @@ async function renderForm(id, ideeKey) {
         <label class="field">Type de défi<select name="type">
           ${Object.entries(TYPES).map(([k, t]) => `<option value="${k}" ${k === d.type ? 'selected' : ''}>${t.emoji} ${t.label}</option>`).join('')}
         </select></label>
-        <label class="field">Fréquence de saisie<select name="frequence_saisie">
-          <option value="jour" ${d.frequence_saisie === 'jour' ? 'selected' : ''}>Chaque jour</option>
-          <option value="semaine" ${d.frequence_saisie === 'semaine' ? 'selected' : ''}>Chaque semaine</option>
-        </select></label>
         <label class="field">Début<input type="date" name="date_debut" required value="${esc(d.date_debut)}"></label>
         <label class="field">Fin<input type="date" name="date_fin" required value="${esc(d.date_fin)}"></label>
+      </div>
+      <div class="field help-field">
+        <div class="lbl-row"><span class="lbl">Comment tu suis ton défi ?</span>${helpBtn('aide-suivi')}</div>
+        <div class="suivi-pick">${Object.entries(SUIVIS).map(([k, v]) => `<label class="suivi-opt"><input type="radio" name="frequence_saisie" value="${k}" ${d.frequence_saisie === k ? 'checked' : ''}><span>${v.label}</span></label>`).join('')}</div>
+        <p class="help-text" id="aide-suivi" hidden>${Object.values(SUIVIS).map((v) => `<b>${v.label}</b> : ${v.aide}`).join('<br>')}</p>
       </div>
       <label class="field">Récompense si objectifs atteints<input name="recompense" value="${esc(d.recompense)}" placeholder="ex : resto tous ensemble"></label>
       <label class="field">Sanction si objectif raté<input name="sanction_finale" value="${esc(d.sanction_finale)}" placeholder="ex : faire le ménage chez l'autre"></label>
@@ -1321,7 +1357,7 @@ async function renderForm(id, ideeKey) {
           <span><b>${v.emoji} ${v.label}</b><small>${v.aide}</small></span></label>`).join('')}
       </div>
 
-      ${edit ? '' : `<h3 class="mt">Mon objectif</h3><div id="obj-fields">${objectifFields(d.type, objIdee)}</div>
+      ${edit ? '' : `<h3 class="mt">Mon objectif</h3><div id="obj-fields">${objectifFields(d.type, objIdee, d.frequence_saisie)}</div>
         <div class="only-potes"><h3 class="mt">Inviter des potes</h3>
         ${amis.length ? `<div class="chips pick">${amis.map((a) => `<label class="chip pick-chip"><input type="checkbox" name="amis" value="${esc(a.pseudo)}"><span>${esc(a.pseudo)}</span></label>`).join('')}</div>`
           : `<p class="muted">Tu n'as pas encore d'amis dans l'app. <a href="#/amis"><b>Ajoute-les ici</b></a>.</p>`}
@@ -1343,10 +1379,13 @@ async function renderForm(id, ideeKey) {
   };
   form.querySelectorAll('[name=mode]').forEach((r) => { r.onchange = setMode; });
   setMode();
-  form.type.onchange = () => {
+  const refreshObj = () => {
     const box = $('#obj-fields');
-    if (box) box.innerHTML = objectifFields(form.type.value, { objectif: form.objectif.value });
+    const mode = form.querySelector('[name=frequence_saisie]:checked')?.value;
+    if (box) box.innerHTML = objectifFields(form.type.value, { objectif: form.objectif.value }, mode);
   };
+  form.type.onchange = refreshObj;
+  form.querySelectorAll('[name=frequence_saisie]').forEach((r) => { r.onchange = refreshObj; });
   if (edit) $('#del-defi').onclick = async () => {
     if (!(await confirmDlg('Supprimer ce défi ?', 'Toutes ses données seront perdues pour tout le monde.', 'Supprimer'))) return;
     try { await api.deleteDefi(id); toast('Défi supprimé'); go('#/'); } catch (e) { toast(e.message, true); }
