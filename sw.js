@@ -1,11 +1,12 @@
 // Service worker minimal : rend le site installable comme une app et utilisable hors-ligne.
-const CACHE = 'pari-tenu-v17';
-const FILES = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'api-supabase.js', 'api-demo.js', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-180.png',
+const CACHE = 'pari-tenu-v18';
+const FILES = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'api-supabase.js', 'api-demo.js', 'manifest.json', 'icon.svg', 'assets/icon-192.png', 'assets/icon-512.png', 'assets/icon-180.png',
   'fonts/lilita-one-latin-400-normal.woff2', 'fonts/jost-latin-300-normal.woff2', 'fonts/jost-latin-400-normal.woff2',
   'fonts/jost-latin-500-normal.woff2', 'fonts/jost-latin-600-normal.woff2'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
+  // Chaque fichier est mis en cache séparément : un fichier manquant ne bloque plus l'installation
+  e.waitUntil(caches.open(CACHE).then((c) => Promise.all(FILES.map((f) => c.add(f).catch(() => {})))));
   self.skipWaiting();
 });
 

@@ -1571,7 +1571,7 @@ async function activerPush() {
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') throw new Error("Tu n'as pas autorisé les notifications");
   const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('sw.js'));
-  await navigator.serviceWorker.ready;
+    await Promise.race([navigator.serviceWorker.ready, new Promise((_, ko) => setTimeout(() => ko(new Error("Le fichier sw.js ne démarre pas : vérifie qu'il est bien à jour sur GitHub, puis ferme et rouvre l'appli")), 8000))]);
   const sub = (await reg.pushManager.getSubscription())
     || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64VersOctets(VAPID_PUBLIC_KEY) }));
   await api.savePushSub(sub.toJSON());
