@@ -33,8 +33,8 @@ self.addEventListener('push', (e) => {
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : '' }; }
   const travaux = [self.registration.showNotification(d.title || 'Pari tenu', {
     body: d.body || '',
-    icon: 'icon-192.png',
-    badge: 'icon-192.png',
+    icon: 'assets/icon-192.png',
+    badge: 'assets/icon-192.png',
     data: { url: d.url || '#/' },
     tag: d.tag || undefined,
   })];
