@@ -17,9 +17,10 @@ perte de poids, salle de sport, arrêter de fumer ou défi libre.
   - 🌍 Public : visible par tous les inscrits, qui peuvent le rejoindre
 - **Invitations** par pseudo, à accepter ou refuser
 - **Objectif perso** pour chaque membre, et une interface qui s'adapte au type de défi
-- Compte à rebours, saisie **chaque jour ou chaque semaine**
+- Compte à rebours, suivi **chaque jour**, **chaque semaine**, **chaque mois**, ou **seulement quand on craque** (rien à cocher : chaque jour sans écart compte comme réussi, avec un nombre d'écarts autorisés)
 - « **J'ai flanché** » / « **Signaler qu'il/elle a flanché** » → sanction votée par **tous** les membres
 - Bilan final : **récompense** ou **sanction**
+- **Notifications** : cloche 🔔 dans l'appli (invitations, demandes d'ami, écarts, sanctions, messages, sorties bookées, rappels, anniversaires) + notifications sur le téléphone même appli fermée → voir **NOTIFICATIONS.md**
 - **Barre d'onglets** : Accueil · Défis · ＋ Nouveau défi · Chat · Amis (l'admin a un bouton bouclier en haut)
 - **Amis** : envoyer / accepter des demandes d'ami (pastille sur l'onglet quand une demande attend) ; les amis sont proposés en un clic pour les invitations
 - **Calendrier** : jours tenus en vert, écarts en rose, sur chaque défi et sur l'accueil

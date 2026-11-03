@@ -166,6 +166,29 @@
     async repondreAmi(id, accept) { ok(await sb.rpc('repondre_ami', { a: id, accepter: accept })); },
     async supprimerAmi(id) { ok(await sb.from('amities').delete().eq('id', id)); },
 
+    // ----- Notifications (cloche + téléphone) -----
+    pushDispo: true,
+    async listNotifs() { return ok(await sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(80)); },
+    async nbNotifsNonLues() {
+      const { count, error } = await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('lu', false);
+      if (error) throw new Error(error.message);
+      return count || 0;
+    },
+    async lireNotif(id) { ok(await sb.from('notifications').update({ lu: true }).eq('id', id)); },
+    async lireNotifsLien(lien) { ok(await sb.from('notifications').update({ lu: true }).eq('lien', lien).eq('lu', false)); },
+    async toutLire() { ok(await sb.from('notifications').update({ lu: true }).eq('lu', false)); },
+    subscribeNotifs(onChange) {
+      const ch = sb.channel('notifs-' + Math.random().toString(36).slice(2))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => onChange())
+        .subscribe();
+      return () => sb.removeChannel(ch);
+    },
+    async savePushSub(s) {
+      ok(await sb.from('push_abonnements').upsert(
+        { user_id: await uidNow(), endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth }, { onConflict: 'endpoint' }));
+    },
+    async deletePushSub(endpoint) { ok(await sb.from('push_abonnements').delete().eq('endpoint', endpoint)); },
+
     // ----- Chat en direct -----
     // Un salon = { kind: 'd' (défi) | 'c' (conversation privée), id }
     async listConversations() {

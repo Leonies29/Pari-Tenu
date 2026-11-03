@@ -43,7 +43,7 @@
       { id: 'e2', defi_id: 'd3', joueur: 'u4', signale_par: 'u4', date: day(-4), description: 'Soirée, 3 cigarettes', sanction: 'Faire 30 min de course', valide_par: ['u4'], statut: 'à décider' },
     ];
     const invitations = [{ id: 'i1', defi_id: 'd3', from_user: 'u3', to_user: 'u1', statut: 'en attente', created_at: day(-1) }];
-    return { profiles, defis, membres, suivi, ecarts, invitations, messages: seedMessages(), amities: seedAmities(), conversations: seedConversations() };
+    return { profiles, defis, membres, suivi, ecarts, invitations, messages: seedMessages(), amities: seedAmities(), conversations: seedConversations(), notifications: seedNotifs() };
   }
 
   // Sexe et date de naissance des comptes de test (Camille fête son anniversaire aujourd'hui)
@@ -81,6 +81,22 @@
     ];
   }
 
+  function seedNotifs() {
+    const il = (min) => new Date(Date.now() - min * 60000).toISOString();
+    const n = (user_id, type, titre, texte, lien, min, lu = false) => ({ id: newId(), user_id, type, titre, texte, lien, lu, created_at: il(min) });
+    return [
+      n('u1', 'invitation', 'Invitation à un défi', 'Hugo t\'invite à « Stop clope »', '#/defi/d3', 60),
+      n('u1', 'ami', "Demande d'ami", "Inès veut t'ajouter en ami", '#/amis', 140),
+      n('u1', 'ami', "Demande d'ami", "Hugo veut t'ajouter en ami", '#/amis', 300),
+      n('u1', 'message', 'Camille', "Camille : qui est dispo ? Sushi", '#/chat/c/c1', 25),
+      n('u1', 'anniv', 'Anniversaire 🎂', "C'est l'anniversaire de Camille aujourd'hui !", '#/amis', 400),
+      n('u1', 'membre', 'Nouveau dans le défi', 'Camille a rejoint « Objectif été »', '#/defi/d1', 60 * 24 * 3, true),
+      n('u3', 'anniv', 'Anniversaire 🎂', "C'est l'anniversaire de Camille aujourd'hui !", '#/amis', 400),
+      n('u3', 'sanction', 'Sanction à valider', 'Pour Inès : Faire 30 min de course', '#/defi/d3', 90),
+      n('u2', 'anniv', 'Joyeux anniversaire Camille ! 🎂', 'Toute la team Pari tenu te souhaite une super journée', '#/', 420),
+    ];
+  }
+
   function seedConversations() {
     return [
       { id: 'c1', nom: '', created_by: 'u2', membres: ['u1', 'u2'] },
@@ -94,6 +110,7 @@
   if (!db.amities) db.amities = seedAmities();
   profilsDemo(db.profiles);
   if (!db.conversations) { db.conversations = seedConversations(); db.messages = seedMessages(); }
+  if (!db.notifications) db.notifications = seedNotifs();
   db.messages.forEach((m) => { m.type = m.type || 'texte'; m.data = m.data || {}; m.reponses = m.reponses || []; });
   const save = () => { try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch {} };
   save();
@@ -110,8 +127,33 @@
     bc.onmessage = () => { try { db = JSON.parse(localStorage.getItem(DB_KEY)) || db; } catch {} listeners.forEach((f) => f()); };
   } catch {}
   function emit() { listeners.forEach((f) => f()); try { bc && bc.postMessage(1); } catch {} }
+  // Notifications de démo (mêmes règles que les déclencheurs de la base)
+  const notifListeners = new Set();
+  function notify(dest, type, titre, texte, lien, fusion = false) {
+    if (!dest) return;
+    const p = db.profiles.find((x) => x.id === dest);
+    if (!p || p.bloque) return;
+    const now = new Date().toISOString();
+    const ex = fusion && db.notifications.find((x) => x.user_id === dest && x.type === type && x.lien === lien && !x.lu);
+    if (ex) Object.assign(ex, { titre, texte, created_at: now });
+    else db.notifications.push({ id: newId(), user_id: dest, type, titre, texte: String(texte).slice(0, 240), lien, lu: false, created_at: now });
+    notifListeners.forEach((f) => f());
+  }
+  const membresDe = (defiId) => db.membres.filter((m) => m.defi_id === defiId).map((m) => m.user_id);
   const roomOf = (m) => (m.defi_id ? 'd' + m.defi_id : 'c' + m.conv_id);
   const canWrite = (kind, id) => (kind === 'd' ? isMember(id) : !!db.conversations.find((c) => c.id === id && c.membres.includes(sessionId)));
+
+  function salonDe(m) {
+    if (m.defi_id) return { lien: '#/chat/d/' + m.defi_id, titre: getD(m.defi_id)?.nom, dests: membresDe(m.defi_id) };
+    const c = db.conversations.find((x) => x.id === m.conv_id);
+    return { lien: '#/chat/c/' + m.conv_id, titre: c?.nom || '', dests: c ? c.membres : [] };
+  }
+  function notifierMessage(m) {
+    const { lien, titre, dests } = salonDe(m);
+    const auteur = pseudoOf(m.user_id);
+    const texte = auteur + ' : ' + (m.type === 'proposition' ? 'qui est dispo ? ' + (m.data?.titre || '') : m.type === 'sondage' ? 'nouveau sondage : ' + (m.data?.question || '') : m.contenu);
+    dests.filter((u) => u !== m.user_id).forEach((u) => notify(u, 'message', titre || auteur, texte, lien, true));
+  }
 
   // Démo : les potes « répondent » tout seuls pour montrer le direct
   function simuler(kind, id, m) {
@@ -127,6 +169,7 @@
           db.messages.push({ id: newId(), defi_id: m.defi_id, conv_id: m.conv_id, user_id: who, type: 'texte', data: {}, reponses: [],
             contenu: pick(['Haha grave 😂', 'On lâche rien 💪', 'Je valide !', "T'es chaud(e) 🔥", 'Ok pour moi', 'Pari tenu 🤝', 'Je te surveille 👀']),
             created_at: new Date().toISOString() });
+          notifierMessage(db.messages[db.messages.length - 1]);
         } else return;
         save(); emit();
       }, 1500 + i * 1200 + Math.random() * 1500);
@@ -218,7 +261,10 @@
     async join(defiId) {
       const d = getD(defiId);
       if (!d || d.visibilite !== 'public') err('Ce défi est privé : il faut une invitation');
-      if (!isMember(defiId)) db.membres.push({ defi_id: defiId, user_id: meId(), objectif: '', valeur_depart: null, valeur_cible: null, unite: '', joined_at: day(0) });
+      if (!isMember(defiId)) {
+        membresDe(defiId).forEach((u) => notify(u, 'membre', 'Nouveau dans le défi', `${me().pseudo} a rejoint « ${d.nom} »`, '#/defi/' + defiId));
+        db.membres.push({ defi_id: defiId, user_id: meId(), objectif: '', valeur_depart: null, valeur_cible: null, unite: '', joined_at: day(0) });
+      }
       db.invitations.filter((i) => i.defi_id === defiId && i.to_user === sessionId).forEach((i) => { i.statut = 'acceptée'; });
       save();
     },
@@ -238,6 +284,7 @@
       const ex = db.invitations.find((i) => i.defi_id === defiId && i.to_user === cible.id);
       if (ex) Object.assign(ex, { statut: 'en attente', from_user: sessionId });
       else db.invitations.push({ id: newId(), defi_id: defiId, from_user: sessionId, to_user: cible.id, statut: 'en attente', created_at: day(0) });
+      notify(cible.id, 'invitation', 'Invitation à un défi', `${me().pseudo} t'invite à « ${getD(defiId)?.nom} »`, '#/defi/' + defiId);
       save(); return 'Invitation envoyée';
     },
     async cancelInvitation(id) { db.invitations = db.invitations.filter((i) => i.id !== id); save(); },
@@ -251,7 +298,10 @@
       const i = db.invitations.find((x) => x.id === id && x.to_user === meId() && x.statut === 'en attente');
       if (!i) err('Invitation introuvable');
       i.statut = accept ? 'acceptée' : 'refusée';
-      if (accept && !isMember(i.defi_id)) db.membres.push({ defi_id: i.defi_id, user_id: sessionId, objectif: '', valeur_depart: null, valeur_cible: null, unite: '', joined_at: day(0) });
+      if (accept && !isMember(i.defi_id)) {
+        membresDe(i.defi_id).forEach((u) => notify(u, 'membre', 'Nouveau dans le défi', `${me().pseudo} a rejoint « ${getD(i.defi_id)?.nom} »`, '#/defi/' + i.defi_id));
+        db.membres.push({ defi_id: i.defi_id, user_id: sessionId, objectif: '', valeur_depart: null, valeur_cible: null, unite: '', joined_at: day(0) });
+      }
       save();
     },
 
@@ -263,12 +313,21 @@
     },
     async addEcart(e) {
       if (!isMember(e.defi_id) || !isMember(e.defi_id, e.joueur)) err('Seuls les membres du défi peuvent déclarer un écart');
-      db.ecarts.push({ id: newId(), signale_par: meId(), sanction: '', valide_par: [], statut: 'à décider', ...e }); save();
+      db.ecarts.push({ id: newId(), signale_par: meId(), sanction: '', valide_par: [], statut: 'à décider', ...e });
+      const nomD = getD(e.defi_id)?.nom, lienD = '#/defi/' + e.defi_id;
+      if (e.joueur !== sessionId) notify(e.joueur, 'ecart', 'Écart signalé', `${me().pseudo} a signalé un écart pour toi dans « ${nomD} »`, lienD);
+      membresDe(e.defi_id).filter((u) => u !== e.joueur && u !== sessionId).forEach((u) => notify(u, 'ecart', "Quelqu'un a flanché", `${pseudoOf(e.joueur)} a flanché dans « ${nomD} »`, lienD));
+      save();
     },
     async updateEcart(id, fields) {
       const e = db.ecarts.find((x) => x.id === id);
       if (!e || !isMember(e.defi_id)) err('Action réservée aux membres du défi');
-      Object.assign(e, fields); save();
+      const avant = { ...e };
+      Object.assign(e, fields);
+      const lienD = '#/defi/' + e.defi_id;
+      if (e.sanction && e.sanction !== avant.sanction) membresDe(e.defi_id).filter((u) => u !== sessionId).forEach((u) => notify(u, 'sanction', 'Sanction à valider', `Pour ${pseudoOf(e.joueur)} : ${e.sanction}`, lienD));
+      if (e.statut === 'décidée' && avant.statut !== 'décidée') notify(e.joueur, 'sanction', 'Ta sanction est décidée', e.sanction, lienD);
+      save();
     },
     async deleteEcart(id) {
       const e = db.ecarts.find((x) => x.id === id);
@@ -308,18 +367,32 @@
       if (!c || c.bloque) err(`Aucun compte avec le pseudo « ${pseudo} »`);
       if (c.id === u) err("Tu ne peux pas t'ajouter toi-même 😉");
       const a = db.amities.find((x) => (x.demandeur === u && x.destinataire === c.id) || (x.demandeur === c.id && x.destinataire === u));
-      if (!a) { db.amities.push({ id: newId(), demandeur: u, destinataire: c.id, statut: 'en attente' }); save(); return 'Demande envoyée'; }
+      if (!a) { db.amities.push({ id: newId(), demandeur: u, destinataire: c.id, statut: 'en attente' }); notify(c.id, 'ami', "Demande d'ami", `${me().pseudo} veut t'ajouter en ami`, '#/amis'); save(); return 'Demande envoyée'; }
       if (a.statut === 'acceptée') err('Vous êtes déjà amis');
-      if (a.destinataire === u) { a.statut = 'acceptée'; save(); return 'Vous êtes maintenant amis 🎉'; }
+      if (a.destinataire === u) { a.statut = 'acceptée'; notify(a.demandeur, 'ami', 'Nouvel ami 🎉', `${me().pseudo} a accepté ta demande`, '#/amis'); save(); return 'Vous êtes maintenant amis 🎉'; }
       err('Demande déjà envoyée');
     },
     async repondreAmi(id, accept) {
       const a = db.amities.find((x) => x.id === id && x.destinataire === meId() && x.statut === 'en attente');
       if (!a) err('Demande introuvable');
-      if (accept) a.statut = 'acceptée'; else db.amities = db.amities.filter((x) => x.id !== id);
+      if (accept) { a.statut = 'acceptée'; notify(a.demandeur, 'ami', 'Nouvel ami 🎉', `${me().pseudo} a accepté ta demande`, '#/amis'); } else db.amities = db.amities.filter((x) => x.id !== id);
       save();
     },
     async supprimerAmi(id) { const u = meId(); db.amities = db.amities.filter((x) => !(x.id === id && (x.demandeur === u || x.destinataire === u))); save(); },
+
+    // ----- Notifications -----
+    pushDispo: false,
+    async listNotifs() {
+      const u = meId();
+      return clone(db.notifications.filter((n) => n.user_id === u).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 80));
+    },
+    async nbNotifsNonLues() { const u = meId(); return db.notifications.filter((n) => n.user_id === u && !n.lu).length; },
+    async lireNotif(id) { const n = db.notifications.find((x) => x.id === id && x.user_id === meId()); if (n) n.lu = true; save(); },
+    async lireNotifsLien(lien) { const u = meId(); db.notifications.forEach((n) => { if (n.user_id === u && n.lien === lien) n.lu = true; }); save(); },
+    async toutLire() { const u = meId(); db.notifications.forEach((n) => { if (n.user_id === u) n.lu = true; }); save(); },
+    subscribeNotifs(cb) { notifListeners.add(cb); return () => notifListeners.delete(cb); },
+    async savePushSub() { err('Les notifications sur le téléphone marcheront une fois Supabase branché'); },
+    async deletePushSub() {},
 
     // ----- Chat (démo : synchronisé entre onglets du même navigateur + réponses simulées) -----
     async listConversations() {
@@ -354,7 +427,9 @@
       if (!canWrite(kind, id)) err('Rejoins le défi pour écrire ici');
       const m = { id: newId(), defi_id: kind === 'd' ? id : null, conv_id: kind === 'c' ? id : null, user_id: meId(),
         contenu, type, data, reponses: [], created_at: new Date().toISOString() };
-      db.messages.push(m); save(); emit();
+      db.messages.push(m);
+      notifierMessage(m);
+      save(); emit();
       simuler(kind, id, m);
     },
     async repondre(messageId, valeur) {
@@ -368,7 +443,13 @@
     async updateMessageData(messageId, data) {
       const m = db.messages.find((x) => x.id === messageId);
       if (!m || m.user_id !== meId()) err("Seul l'auteur peut faire ça");
-      m.data = data; save(); emit();
+      const etait = m.data?.statut;
+      m.data = data;
+      if (m.type === 'proposition' && data.statut === 'booké' && etait !== 'booké') {
+        const { lien, dests } = salonDe(m);
+        dests.filter((u) => u !== m.user_id).forEach((u) => notify(u, 'booke', "C'est booké ! 🎉", `${data.titre}${data.date ? ' — ' + data.date.slice(8, 10) + '/' + data.date.slice(5, 7) : ''}${data.heure ? ' à ' + data.heure : ''}`, lien));
+      }
+      save(); emit();
     },
     async creerConversation(userIds, nom = '') {
       const u = meId();

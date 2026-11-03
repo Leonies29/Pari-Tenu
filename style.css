@@ -715,4 +715,26 @@ body {
 .suivi-opt input:checked + span { border-color: var(--rose-fonce); background: var(--rose-pale); color: var(--rose-fonce); font-weight: 600; }
 .suivi-opt input:focus-visible + span { outline: 2px solid var(--rose-fonce); outline-offset: 2px; }
 .no-saisie { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; }
-.no-saisie .ico { color: var(--vert); } 
+.no-saisie .ico { color: var(--vert); }
+
+/* ===== Cloche & notifications ===== */
+.navlink.bell-btn { position: relative; width: 38px; height: 38px; padding: 0; display: grid; place-items: center; border-radius: 50%; }
+.navlink.bell-btn svg { width: 19px; height: 19px; }
+.navlink.bell-btn.on { background: var(--vert-fonce); color: #fff; border-color: var(--vert-fonce); }
+.bell-dot { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px;
+  background: var(--rose-fonce); color: #fff; font-style: normal; font-size: 10px; font-weight: 700; line-height: 18px; text-align: center;
+  box-shadow: 0 0 0 2px var(--creme); font-family: var(--sans); letter-spacing: 0; }
+.bell-dot[hidden] { display: none; }
+.notif-list { display: flex; flex-direction: column; }
+.notif { display: flex; align-items: flex-start; gap: 12px; padding: 12px 4px; text-decoration: none; border-top: 1px solid var(--vert-pale); position: relative; }
+.notif:first-child { border-top: none; }
+.notif .nt-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.notif .nt-main b { font-size: 15px; color: var(--vert-fonce); }
+.notif .nt-main span { font-size: 14px; overflow-wrap: anywhere; }
+.notif .nt-main small { font-size: 12px; opacity: .6; margin-top: 2px; }
+.notif.new .nt-main b { color: var(--rose-fonce); }
+.nt-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rose-fonce); flex: none; margin-top: 6px; }
+.push-card { display: flex; gap: 14px; align-items: flex-start; border: 2px dashed var(--rose); background: #fff; }
+.push-card.on { border: 1px solid var(--vert); border-style: solid; }
+.push-card b { font-size: 16px; color: var(--vert-fonce); }
+.push-card p { margin: 4px 0 10px; font-size: 14px; }

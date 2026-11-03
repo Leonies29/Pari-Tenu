@@ -205,7 +205,9 @@ const TABS = [
 ];
 
 function renderNav() {
-  $('#usernav').innerHTML = ME ? `${ME.role === 'admin' ? `<a class="navlink admin-btn ${location.hash.startsWith('#/admin') ? 'on' : ''}" href="#/admin" title="Administration" aria-label="Administration">
+  $('#usernav').innerHTML = ME ? `<a class="navlink bell-btn ${location.hash.startsWith('#/notifs') ? 'on' : ''}" href="#/notifs" title="Notifications" aria-label="Notifications">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i class="bell-dot" hidden></i></a>
+    ${ME.role === 'admin' ? `<a class="navlink admin-btn ${location.hash.startsWith('#/admin') ? 'on' : ''}" href="#/admin" title="Administration" aria-label="Administration">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></a>` : ''}
     <a class="navlink pseudo" href="#/compte" title="Mon profil">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>${esc(ME.pseudo)}</a>` : '';
@@ -220,6 +222,7 @@ function renderNav() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
       <span>${t.label}</span></a>`;
   }).join('');
+  majCloche();
   // pastille sur « Amis » quand une demande attend
   api.listAmis().then((A) => {
     const t = bar.querySelector('[data-badge="amis"]');
@@ -233,6 +236,13 @@ async function render() {
   const app = $('#app');
   app.onclick = null;
   if (cleanup) { cleanup(); cleanup = null; }
+  if (ME) {
+    ecouterNotifs();
+    if (['defi', 'chat', 'amis', ''].includes(view) && !(view === 'chat' && !id)) {
+      const lien = view === '' ? '#/' : location.hash;
+      api.lireNotifsLien(lien).then(majCloche).catch(() => {});
+    }
+  }
   document.body.classList.remove('chat-mode');
   if (!ME) return view === 'inscription' ? renderSignup() : renderLogin();
   try {
@@ -244,6 +254,7 @@ async function render() {
     else if (view === 'objectif') await renderObjectif(id);
     else if (view === 'admin') await renderAdmin();
     else if (view === 'compte') renderCompte();
+    else if (view === 'notifs') await renderNotifs();
     else if (view === 'defis') await renderHome();
     else if (view === 'chat' && id2) await renderChat(id, id2);
     else if (view === 'chat' && id) await renderChat('d', id);
@@ -318,6 +329,7 @@ function renderCompte() {
       ${profilFields(ME.sexe, ME.naissance, ME.partage_anniv)}
       <div class="actions"><button class="btn">Enregistrer</button>
         <button type="button" class="btn rose" id="logout">Se déconnecter</button></div>
+      <a class="btn ghost mt" href="#/notifs">Notifications du téléphone</a>
       <button type="button" class="btn ghost mt" id="replay-tuto">Revoir le tuto</button>
       ${api.mode === 'demo' ? '<button type="button" class="btn danger small mt" id="reset">Réinitialiser les données de démo</button>' : ''}
     </form>`;
@@ -328,7 +340,7 @@ function renderCompte() {
     catch (err) { toast(err.message, true); }
   };
   $('#replay-tuto').onclick = () => { go('#/'); setTimeout(startTuto, 400); };
-  $('#logout').onclick = async () => { await api.signOut(); ME = null; go('#/'); };
+  $('#logout').onclick = async () => { await api.signOut(); ME = null; arreterNotifs(); try { navigator.clearAppBadge?.(); } catch {} go('#/'); };
   const r = $('#reset');
   if (r) r.onclick = async () => { if (await confirmDlg('Réinitialiser ?', 'Toutes les données de démo seront remises à zéro.')) { await api.resetDemo(); ME = null; go('#/'); } };
 }
@@ -720,6 +732,7 @@ const ICONS = {
   sport: '<path d="M6.5 7v10M3.5 9.5v5M17.5 7v10M20.5 9.5v5M6.5 12h11"/>',
   cine: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 6l2 4M12 6l2 4M17 6l2 4"/>',
   balade: '<path d="M12 21v-6M12 15c-4 0-6-2.5-6-5.5S8.5 3 12 3s6 3.5 6 6.5-2 5.5-6 5.5z"/><path d="M12 11l2.5-2M12 13l-2.5-2"/>',
+  chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z"/>',
   gateau: '<path d="M4 21h16M5 21v-7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7M5 16.5c1.5 1 3 1 4.5 0s3-1 4.5 0 3 1 4.5 0M12 12V8.5M12 6c.9-.8.9-1.8 0-3-.9 1.2-.9 2.2 0 3z"/>',
   ampoule: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
   balance: '<path d="M12 4v16M7 20h10M5 7h14M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z"/>',
@@ -915,7 +928,7 @@ async function renderChat(kind, id) {
     log.scrollTop = nearBottom ? log.scrollHeight : prevTop;
   };
   const reload = async (forceBottom = false) => {
-    try { draw(await api.getMessages(kind, id), forceBottom); markRead(key); } catch (e) { toast(e.message, true); }
+    try { draw(await api.getMessages(kind, id), forceBottom); markRead(key); api.lireNotifsLien(`#/chat/${kind}/${id}`).then(majCloche).catch(() => {}); } catch (e) { toast(e.message, true); }
   };
   await reload(true);
 
@@ -1490,6 +1503,116 @@ async function renderAdmin() {
   };
 }
 
+
+
+/* ---------- Notifications : cloche, page, téléphone ---------- */
+const VAPID_PUBLIC_KEY = (window.APP_CONFIG && window.APP_CONFIG.VAPID_PUBLIC_KEY) || 'BMBQtgtaDuK3xChkXlHWexK_C_huOtIz5-G6KfjTS7D_i6ab2pZLQGk1sStbbYBzalQWLDo2fdzxxagCRfRRq2M';
+const NOTIF_ICONS = { invitation: 'calendarPlus', ami: 'amis', membre: 'amis', ecart: 'cross', sanction: 'balance', message: 'chat', booke: 'check', rappel: 'clock', anniv: 'gateau' };
+let stopNotifs = null;
+
+async function majCloche() {
+  if (!ME) return;
+  let n = 0;
+  try { n = await api.nbNotifsNonLues(); } catch { return; }
+  const dot = document.querySelector('.bell-dot');
+  if (dot) { dot.hidden = !n; dot.textContent = n > 9 ? '9+' : String(n); }
+  try { if (n) navigator.setAppBadge?.(n); else navigator.clearAppBadge?.(); } catch {}
+}
+function ecouterNotifs() {
+  if (stopNotifs || !api.subscribeNotifs) return;
+  stopNotifs = api.subscribeNotifs(() => {
+    majCloche();
+    if (location.hash.startsWith('#/notifs')) render();
+  });
+}
+function arreterNotifs() { if (stopNotifs) { stopNotifs(); stopNotifs = null; } }
+
+function ilYa(dateIso) {
+  const min = Math.round((Date.now() - new Date(dateIso)) / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const j = Math.round(h / 24);
+  return j === 1 ? 'hier' : j < 7 ? `il y a ${j} jours` : new Date(dateIso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+// État des notifications sur CE téléphone
+async function etatPush() {
+  if (!api.pushDispo) return 'demo';
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const installee = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return ios && !installee ? 'ios-installer' : 'non-supporte';
+  if (Notification.permission === 'denied') return 'refuse';
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    return sub ? 'actif' : 'inactif';
+  } catch { return 'inactif'; }
+}
+function cartePush(etat) {
+  const t = {
+    demo: ['Notifications du téléphone', "Elles marcheront une fois l'appli branchée sur Supabase (pas en mode démo).", ''],
+    'ios-installer': ['Reçois les notifs sur ton iPhone', "Sur iPhone, ajoute d'abord l'appli à ton écran d'accueil : bouton Partager ⬆️ puis « Sur l'écran d'accueil ». Ouvre-la ensuite depuis l'icône et reviens ici.", ''],
+    'non-supporte': ['Notifications du téléphone', "Ce navigateur ne permet pas les notifications. Essaie avec Chrome (Android) ou depuis l'icône sur l'écran d'accueil (iPhone).", ''],
+    refuse: ['Notifications bloquées', "Tu as refusé les notifications. Pour les réactiver, va dans les réglages de ton téléphone (Notifications → Pari tenu) ou du navigateur.", ''],
+    inactif: ['Active les notifs sur ce téléphone', 'Invitations, écarts, messages, rappels… même quand l\'appli est fermée.', '<button class="btn rose small" data-push="on">Activer</button>'],
+    actif: ['Notifications activées ✓', 'Tu les reçois sur ce téléphone, même appli fermée.', '<button class="btn ghost small" data-push="off">Désactiver</button>'],
+  }[etat];
+  return `<div class="card push-card ${etat === 'actif' ? 'on' : ''}"><span class="ico-bubble ${etat === 'actif' ? '' : 'rose'}">${ico('tel')}</span>
+    <div><b>${t[0]}</b><p>${t[1]}</p>${t[2]}</div></div>`;
+}
+function b64VersOctets(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+async function activerPush() {
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error("Tu n'as pas autorisé les notifications");
+  const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('sw.js'));
+  await navigator.serviceWorker.ready;
+  const sub = (await reg.pushManager.getSubscription())
+    || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64VersOctets(VAPID_PUBLIC_KEY) }));
+  await api.savePushSub(sub.toJSON());
+}
+async function desactiverPush() {
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = reg && await reg.pushManager.getSubscription();
+  if (sub) { await api.deletePushSub(sub.endpoint).catch(() => {}); await sub.unsubscribe(); }
+}
+
+async function renderNotifs() {
+  const [liste, etat] = await Promise.all([api.listNotifs(), etatPush()]);
+  const nouvelles = liste.filter((n) => !n.lu), vues = liste.filter((n) => n.lu);
+  const item = (n) => `<a class="notif ${n.lu ? '' : 'new'}" href="${esc(n.lien || '#/')}" data-nid="${esc(n.id)}">
+      <span class="ico-bubble sm ${['ecart', 'sanction', 'anniv', 'invitation'].includes(n.type) ? 'rose' : ''}">${ico(NOTIF_ICONS[n.type] || 'autre')}</span>
+      <span class="nt-main"><b>${esc(n.titre)}</b><span>${esc(n.texte)}</span><small>${ilYa(n.created_at)}</small></span>
+      ${n.lu ? '' : '<i class="nt-dot"></i>'}</a>`;
+  $('#app').innerHTML = `<section class="hero small"><h1>Notifs</h1><span class="kicker">Ce qui s'est passé</span></section>
+    ${cartePush(etat)}
+    <div class="card">
+      <div class="head-row"><h3>Nouvelles</h3>${nouvelles.length ? '<button class="btn ghost small" id="tout-lire">Tout marquer comme lu</button>' : ''}</div>
+      ${nouvelles.length ? `<div class="notif-list">${nouvelles.map(item).join('')}</div>` : '<p class="muted">Rien de nouveau. Tout est à jour 🌿</p>'}
+    </div>
+    ${vues.length ? `<div class="card"><h3>Déjà vues</h3><div class="notif-list">${vues.map(item).join('')}</div></div>` : ''}`;
+
+  $('#app').onclick = async (e) => {
+    const a = e.target.closest('[data-nid]');
+    if (a) { api.lireNotif(a.dataset.nid).then(majCloche).catch(() => {}); return; }   // le lien s'ouvre normalement
+    const b = e.target.closest('[data-push]');
+    if (b) {
+      b.disabled = true;
+      try {
+        if (b.dataset.push === 'on') { await activerPush(); toast('Notifications activées 🔔'); }
+        else { await desactiverPush(); toast('Notifications désactivées sur ce téléphone'); }
+      } catch (err) { toast(err.message || 'Impossible pour le moment', true); }
+      render();
+    }
+  };
+  const tl = $('#tout-lire');
+  if (tl) tl.onclick = (e) => { e.stopPropagation(); act(() => api.toutLire(), 'Tout est lu').then(majCloche); };
+}
 
 /* ---------- Message d'anniversaire ---------- */
 function popupAnniv() {
